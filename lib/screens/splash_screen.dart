@@ -84,7 +84,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     ),
                     const SizedBox(height: 10),
                     const Text(
-                      "Agra's Trusted Bullion Dealer",
+                      "Agra's Trusted Dealer",
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.grey,
