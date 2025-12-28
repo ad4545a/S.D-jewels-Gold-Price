@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1066317379834",
+    "project_id": "sd-jewels",
+    "storage_bucket": "sd-jewels.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1066317379834:android:74baf5c752f5a6838db143",
+        "android_client_info": {
+          "package_name": "com.adityaApps.Goldprice"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkfYigmxUuOGZYrTYGawB2xFTVgDRvk7o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
