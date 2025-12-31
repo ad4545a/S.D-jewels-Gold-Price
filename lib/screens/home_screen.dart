@@ -7,6 +7,7 @@ import 'contact_screen.dart';
 import 'contact_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'marquee_widget.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,6 +25,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic> _goldData = {};
   Map<String, dynamic> _silverData = {};
   Map<String, dynamic> _usdData = {};
+
+  Map<String, Color> _priceColors = {}; // Store colors for price changes
+  final Map<String, Timer> _colorTimers = {}; // timers for resetting colors
   String _tickerText = "Welcome to S.D. Jewels"; // Default Text
   
   int _selectedIndex = 0;
@@ -34,6 +38,14 @@ class _HomeScreenState extends State<HomeScreen> {
     _activateListeners();
   }
   
+  @override
+  void dispose() {
+    for (var timer in _colorTimers.values) {
+      timer.cancel();
+    }
+    super.dispose();
+  }
+
   @override
   void _activateListeners() {
     // Monitor Connection State
@@ -49,11 +61,34 @@ class _HomeScreenState extends State<HomeScreen> {
     _database.child('live_rates').onValue.listen((event) {
       final data = event.snapshot.value as Map?;
       if (data != null) {
+        final newGold = Map<String, dynamic>.from(data['gold'] ?? {});
+        final newSilver = Map<String, dynamic>.from(data['silver'] ?? {});
+        final newUsd = Map<String, dynamic>.from(data['usdinr'] ?? {});
+        
         setState(() {
           _status = data['status'] ?? "Live";
-          _goldData = Map<String, dynamic>.from(data['gold'] ?? {});
-          _silverData = Map<String, dynamic>.from(data['silver'] ?? {});
-          _usdData = Map<String, dynamic>.from(data['usdinr'] ?? {});
+          
+
+
+          // Let's do it simpler without inline function to avoid closure confusion with map keys
+          // Gold Checks
+          _checkColor('gold_mcx_price', newGold['mcx_price'], _goldData['mcx_price']);
+          _checkColor('gold_spot_price', newGold['spot_price'], _goldData['spot_price']);
+          _checkColor('gold_rate_999', newGold['rate_999'], _goldData['rate_999']);
+          _checkColor('gold_rate_9950', newGold['rate_9950'], _goldData['rate_9950']);
+          
+          // Silver Checks
+          _checkColor('silver_spot_price', newSilver['spot_price'], _silverData['spot_price']);
+          _checkColor('silver_mcx_price', newSilver['mcx_price'], _silverData['mcx_price']);
+          _checkColor('silver_rate_9999', newSilver['rate_9999'], _silverData['rate_9999']);
+          _checkColor('silver_rate_bars', newSilver['rate_bars'], _silverData['rate_bars']);
+          
+          // USD
+          _checkColor('usd_price', newUsd['price'], _usdData['price']);
+
+          _goldData = newGold;
+          _silverData = newSilver;
+          _usdData = newUsd;
         });
       }
     });
@@ -71,6 +106,35 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     });
+
+  }
+
+  void _checkColor(String key, dynamic newVal, dynamic oldVal) {
+      if (newVal == null || oldVal == null) return;
+      num n = newVal is num ? newVal : num.tryParse(newVal.toString()) ?? 0;
+      num o = oldVal is num ? oldVal : num.tryParse(oldVal.toString()) ?? 0;
+      
+      if (o == 0) return; // Ignore initial 0 state
+      
+      if (n == o) return; // No change
+
+      // Cancel existing timer
+      _colorTimers[key]?.cancel();
+
+      if (n > o) {
+         _priceColors[key] = Colors.green;
+      } else if (n < o) {
+         _priceColors[key] = Colors.red;
+      }
+      
+      // Set Timer to revert
+      _colorTimers[key] = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          setState(() {
+            _priceColors.remove(key); // Remove color to revert to default
+          });
+        }
+      });
   }
 
   String _fmt(dynamic price) {
@@ -138,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Icon(Icons.diamond_outlined, size: 50, color: Colors.white),
                     const SizedBox(height: 10),
                     const Text("S.D. JEWELS", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                    const Text("Agra's Trusted Bullion Dealer", style: TextStyle(color: Colors.white70)),
+                    const Text("Agra's Trusted  Dealer", style: TextStyle(color: Colors.white70)),
                   ],
                 ),
               ),
@@ -260,11 +324,11 @@ class _HomeScreenState extends State<HomeScreen> {
             // Top Cards (INR/USD, Gold, Silver)
             Row(
               children: [
-                Expanded(child: _buildTopCard("INR VS USD", "${_usdData['price']?.toStringAsFixed(2) ?? '83.50'}", "MCX", Colors.amber)),
+                Expanded(child: _buildTopCard("INR VS USD", "${_usdData['price']?.toStringAsFixed(2) ?? '83.50'}", "MCX", _priceColors['usd_price'] ?? Colors.amber)),
                 const SizedBox(width: 8),
-                Expanded(child: _buildTopCard("GOLD", _fmt(_goldData['mcx_price']), "MCX", Colors.black)),
+                Expanded(child: _buildTopCard("GOLD SPOT", "\$ ${_goldData['spot_price'] ?? '---'}", "INTL", _priceColors['gold_spot_price'] ?? Colors.black)),
                 const SizedBox(width: 8),
-                Expanded(child: _buildTopCard("SILVER", _fmt(_silverData['mcx_price']), "MCX", Colors.black)),
+                Expanded(child: _buildTopCard("SILVER SPOT", "\$ ${_silverData['spot_price'] ?? '---'}", "INTL", _priceColors['silver_spot_price'] ?? Colors.black)),
               ],
             ),
             const SizedBox(height: 20),
@@ -282,6 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.bar_chart,
               prem: (_goldData['rate_9950'] ?? 0) - (_goldData['mcx_price'] ?? 0),
               high: _fmt(_goldData['high']), low: _fmt(_goldData['low']),
+              valueColor: _priceColors['gold_rate_9950']
             ),
             const SizedBox(height: 10),
             
@@ -292,8 +357,35 @@ class _HomeScreenState extends State<HomeScreen> {
               value: _fmt(_silverData['rate_9999']), 
               bg: const Color(0xFFFFECB3), iconColor: Colors.black,
               icon: Icons.bar_chart,
-              prem: (_silverData['rate_9999'] ?? 0) - (_silverData['mcx_price'] ?? 0),
+               prem: (_silverData['rate_9999'] ?? 0) - (_silverData['mcx_price'] ?? 0),
+                high: _fmt(_silverData['high']), low: _fmt(_silverData['low']),
+               valueColor: _priceColors['silver_rate_9999']
+            ),
+            const SizedBox(height: 10),
+            
+            // Gold 999 (RTGS)
+            _buildSingleRateCard(
+              "Gold 999 (RTGS)", 
+              mcx: _fmt(_goldData['mcx_price']), 
+              value: _fmt(_goldData['rate_999']), 
+              bg: const Color(0xFFFFECB3), iconColor: Colors.black,
+              icon: Icons.bar_chart,
+              prem: (_goldData['rate_999'] ?? 0) - (_goldData['mcx_price'] ?? 0),
+              high: _fmt(_goldData['high']), low: _fmt(_goldData['low']),
+              valueColor: _priceColors['gold_rate_999']
+            ),
+            const SizedBox(height: 10),
+            
+            // Silver Bars
+            _buildSingleRateCard(
+              "Silver Bars", 
+              mcx: _fmt(_silverData['mcx_price']), 
+              value: _fmt(_silverData['rate_bars']), 
+              bg: const Color(0xFFFFECB3), iconColor: Colors.black,
+              icon: Icons.bar_chart,
+              prem: (_silverData['rate_bars'] ?? 0) - (_silverData['mcx_price'] ?? 0),
               high: _fmt(_silverData['high']), low: _fmt(_silverData['low']),
+              valueColor: _priceColors['silver_rate_bars']
             ),
             const SizedBox(height: 20),
 
@@ -313,22 +405,10 @@ class _HomeScreenState extends State<HomeScreen> {
               bg: Colors.white, iconColor: Colors.black,
               goldPrem: (_goldData['rate_999'] ?? 0) - (_goldData['mcx_price'] ?? 0),
               silverPrem: (_silverData['rate_9999'] ?? 0) - (_silverData['mcx_price'] ?? 0),
+              goldColor: _priceColors['gold_rate_999'],
+              silverColor: _priceColors['silver_rate_9999'],
             ),
-            const SizedBox(height: 10),
 
-            // Cash Book (Combined)
-            _buildRateCard(
-              "Cash Book", 
-              "Gold Cash", 
-              mcx1: _fmt(_goldData['mcx_price']),
-              val1: _fmt(_goldData['rate_9950']), 
-              l2: "Silver Cash", 
-              mcx2: _fmt(_silverData['mcx_price']),
-              val2: _fmt(_silverData['rate_bars']), 
-              bg: Colors.white, iconColor: Colors.black, isCash: true,
-              goldPrem: (_goldData['rate_9950'] ?? 0) - (_goldData['mcx_price'] ?? 0),
-              silverPrem: (_silverData['rate_bars'] ?? 0) - (_silverData['mcx_price'] ?? 0),
-            ),
           ],
         ),
       );
@@ -347,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Text(title, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color == Colors.amber ? Colors.black : color)), // Exception for USD label color
         ],
       ),
     );
@@ -378,7 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   // Single Card (For Live Rates)
   Widget _buildSingleRateCard(String title, {String? mcx, required String value, required Color bg, required Color iconColor, required IconData icon, 
-    num? prem, String? high, String? low, bool isCash = false
+    num? prem, String? high, String? low, bool isCash = false, Color? valueColor
   }) {
     String premText = "-";
     Color premColor = Colors.grey;
@@ -428,7 +508,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text("Prem: $premText", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: premColor)),
                   const SizedBox(height: 2),
-                  Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: iconColor)),
+                  Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: valueColor ?? iconColor)),
                 ],
               )
             ],
@@ -444,6 +524,7 @@ class _HomeScreenState extends State<HomeScreen> {
     num? goldPrem, num? silverPrem,
     String? goldHigh, String? goldLow,
     String? silverHigh, String? silverLow,
+    Color? goldColor, Color? silverColor,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -478,9 +559,9 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                Expanded(child: _buildDetailedItem(l1, mcx1, val1, iconColor, prem: goldPrem, high: goldHigh, low: goldLow)),
+                Expanded(child: _buildDetailedItem(l1, mcx1, val1, iconColor, prem: goldPrem, high: goldHigh, low: goldLow, valueColor: goldColor)),
                 Container(width: 1, height: 80, color: Colors.amber.shade100),
-                Expanded(child: _buildDetailedItem(l2 ?? "", mcx2, val2, iconColor, prem: silverPrem, high: silverHigh, low: silverLow)),
+                Expanded(child: _buildDetailedItem(l2 ?? "", mcx2, val2, iconColor, prem: silverPrem, high: silverHigh, low: silverLow, valueColor: silverColor)),
               ],
             ),
           )
@@ -489,7 +570,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDetailedItem(String label, String? mcx, String value, Color color, {num? prem, String? high, String? low}) {
+  Widget _buildDetailedItem(String label, String? mcx, String value, Color color, {num? prem, String? high, String? low, Color? valueColor}) {
     String premText = "-";
     Color premColor = Colors.grey;
     
@@ -519,7 +600,7 @@ class _HomeScreenState extends State<HomeScreen> {
            ],
         ),
         const SizedBox(height: 4),
-        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: valueColor ?? color)),
         if (high != null && low != null)
            Padding(
              padding: const EdgeInsets.only(top: 4.0),
